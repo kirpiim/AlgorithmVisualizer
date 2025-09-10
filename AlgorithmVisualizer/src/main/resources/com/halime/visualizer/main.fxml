@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.canvas.Canvas?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns="http://javafx.com/javafx/21"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.halime.visualizer.controller.MainController">
+
+    <top>
+        <ToolBar>
+            <Button text="Run BFS" onAction="#handleRunBFS"/>
+            <Button text="Run DFS" onAction="#handleRunDFS"/>
+            <Button text="Run Dijkstra" onAction="#handleRunDijkstra"/>
+            <Label text="Speed:"/>
+            <Slider fx:id="speedSlider" min="0.1" max="2" value="1"/>
+        </ToolBar>
+    </top>
+
+    <center>
+        <Canvas fx:id="canvas" width="600" height="400"/>
+    </center>
+
+    <bottom>
+        <Label fx:id="statusLabel" text="Ready"/>
+    </bottom>
+</BorderPane>
