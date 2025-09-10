@@ -1,0 +1,18 @@
+# Gradle
+.gradle/
+build/
+out/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+/shelf/
+/.idea/workspace.xml
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
