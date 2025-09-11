@@ -8,8 +8,8 @@ import javafx.stage.Stage;
 public class MainApp extends Application {
     @Override
     public void start(Stage stage) throws Exception {
-        FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("main.fxml"));
-        Scene scene = new Scene(fxmlLoader.load(), 800, 600);
+        FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/com/halime/visualizer/main.fxml"));
+        Scene scene = new Scene(fxmlLoader.load(), 800, 800);
         stage.setTitle("Algorithm Visualizer");
         stage.setScene(scene);
         stage.show();
