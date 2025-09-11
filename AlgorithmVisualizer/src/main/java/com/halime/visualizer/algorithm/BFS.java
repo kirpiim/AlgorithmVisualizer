@@ -105,19 +105,21 @@ public class BFS {
                 double x = c * cellSize;
                 double y = r * cellSize;
 
+                // fill background color for cell
                 if (walls[r][c]) {
                     gc.setFill(wallColor);
-                    gc.fillRect(x, y, cellSize, cellSize);
                 } else if (visited[r][c]) {
                     gc.setFill(exploredColor);
-                    gc.fillRect(x, y, cellSize, cellSize);
                 } else if (frontier[r][c]) {
                     gc.setFill(frontierColor);
-                    gc.fillRect(x, y, cellSize, cellSize);
                 } else {
                     gc.setFill(unexploredColor);
-                    gc.fillRect(x, y, cellSize, cellSize);
                 }
+                gc.fillRect(x, y, cellSize, cellSize);
+
+                // draw cell border to make grid visible
+                gc.setStroke(Color.DARKGRAY);
+                gc.strokeRect(x, y, cellSize, cellSize);
             }
         }
 
@@ -128,4 +130,5 @@ public class BFS {
         gc.setFill(goalColor);
         gc.fillRect(goalCol * cellSize, goalRow * cellSize, cellSize, cellSize);
     }
+
 }
