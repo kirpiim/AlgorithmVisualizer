@@ -1,5 +1,6 @@
 package com.halime.visualizer.controller;
 
+import com.halime.visualizer.algorithm.BFS;
 import javafx.fxml.FXML;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.control.Label;
@@ -14,7 +15,14 @@ public class MainController {
     @FXML
     private void handleRunBFS() {
         statusLabel.setText("Running BFS...");
+        var gc = canvas.getGraphicsContext2D();
+        double speed = Math.max(1, speedSlider.getValue()); // ensure >0
+        BFS bfs = new BFS();
+        bfs.run(gc, speed);
     }
+
+
+
 
     @FXML
     private void handleRunDFS() {
