@@ -2,6 +2,7 @@ package com.halime.visualizer.controller;
 
 import com.halime.visualizer.algorithm.BFS;
 import com.halime.visualizer.algorithm.DFS;
+import com.halime.visualizer.algorithm.Dijkstra;
 import javafx.fxml.FXML;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.control.Label;
@@ -17,7 +18,7 @@ public class MainController {
     private void handleRunBFS() {
         statusLabel.setText("Running BFS...");
         var gc = canvas.getGraphicsContext2D();
-        double speed = Math.max(1, speedSlider.getValue()); // ensure >0
+        double speed = Math.max(1, speedSlider.getValue());
         BFS bfs = new BFS();
         bfs.run(gc, speed);
     }
@@ -34,5 +35,9 @@ public class MainController {
     @FXML
     private void handleRunDijkstra() {
         statusLabel.setText("Running Dijkstra...");
+        var gc = canvas.getGraphicsContext2D();
+        double speed = Math.max(1, speedSlider.getValue());
+        Dijkstra dijkstra = new Dijkstra();
+        dijkstra.run(gc, speed);
     }
 }
