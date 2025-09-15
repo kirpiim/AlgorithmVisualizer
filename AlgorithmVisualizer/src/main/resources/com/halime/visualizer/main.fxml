@@ -13,6 +13,7 @@
             <Button text="Run BFS" onAction="#handleRunBFS"/>
             <Button text="Run DFS" onAction="#handleRunDFS"/>
             <Button text="Run Dijkstra" onAction="#handleRunDijkstra"/>
+            <Button text="Run AStar" onAction="#handleRunAStar"/>
             <Label text="Speed:"/>
             <Slider fx:id="speedSlider" min="0.1" max="2" value="1"/>
         </ToolBar>
