@@ -12,6 +12,9 @@ public class AStar {
     private final int cols = 20;
     private final int cellSize = 30;
 
+    // Control
+    private volatile boolean running = false;
+
     // Colors
     private final Color unexploredColor = Color.LIGHTGRAY;
     private final Color frontierColor = Color.BLUE;
@@ -25,6 +28,7 @@ public class AStar {
     private final boolean[][] walls = new boolean[rows][cols];
 
     public void run(GraphicsContext gc, double speed) {
+        running = true;
         setupWeightsAndWalls();
 
         final int canvasWidth = cols * cellSize;
@@ -58,16 +62,20 @@ public class AStar {
                 boolean found = aStarSearch(startRow, startCol, goalRow, goalCol,
                         gc, speed, visited, frontier, pathCells, parentRow, parentCol);
 
-                if (found) {
+                if (running && found) {
                     LinkedList<int[]> path = reconstructPath(parentRow, parentCol, goalRow, goalCol);
                     animatePath(gc, path, speed, startRow, startCol, goalRow, goalCol, visited, frontier, pathCells);
-                } else {
+                } else if (running) {
                     Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
                 }
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                Thread.currentThread().interrupt();
             }
         }).start();
+    }
+
+    public void stop() {
+        running = false;
     }
 
     private boolean aStarSearch(int startRow, int startCol, int goalRow, int goalCol,
@@ -83,7 +91,7 @@ public class AStar {
                 g[a[0]][a[1]] + heuristic(a[0], a[1], goalRow, goalCol)));
         pq.add(new int[]{startRow, startCol});
 
-        while (!pq.isEmpty()) {
+        while (running && !pq.isEmpty()) {
             int[] current = pq.poll();
             int r = current[0], c = current[1];
 
@@ -119,8 +127,7 @@ public class AStar {
     }
 
     private int heuristic(int r, int c, int goalRow, int goalCol) {
-        // Manhattan distance
-        return Math.abs(r - goalRow) + Math.abs(c - goalCol);
+        return Math.abs(r - goalRow) + Math.abs(c - goalCol); // Manhattan
     }
 
     private LinkedList<int[]> reconstructPath(int[][] parentRow, int[][] parentCol, int goalRow, int goalCol) {
@@ -142,6 +149,7 @@ public class AStar {
         new Thread(() -> {
             try {
                 for (int[] cell : path) {
+                    if (!running) return;
                     int r = cell[0], c = cell[1];
                     if (!((r == startRow && c == startCol) || (r == goalRow && c == goalCol))) {
                         pathCells[r][c] = true;
@@ -150,7 +158,7 @@ public class AStar {
                     }
                 }
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                Thread.currentThread().interrupt();
             }
         }).start();
     }
@@ -172,13 +180,12 @@ public class AStar {
                 } else if (visited[r][c]) {
                     gc.setFill(exploredColor);
                 } else {
-                    // weight-based color
                     if (weights[r][c] == 1) {
-                        gc.setFill(unexploredColor); // normal ground
+                        gc.setFill(unexploredColor);
                     } else if (weights[r][c] == 5) {
-                        gc.setFill(Color.ORANGE);  // rocky terrain
+                        gc.setFill(Color.ORANGE);
                     } else if (weights[r][c] == 10) {
-                        gc.setFill(Color.LIGHTBLUE); // water
+                        gc.setFill(Color.LIGHTBLUE);
                     } else {
                         gc.setFill(unexploredColor);
                     }
