@@ -23,7 +23,19 @@ public class DFS {
 
     private final boolean[][] walls = new boolean[rows][cols];
 
-    public void run(GraphicsContext gc, double speed) {
+    // ---- Thread management ----
+    private volatile boolean running = false;
+    private Thread worker;
+    private Thread animator;
+
+    /** Gracefully stop DFS and its animation */
+    public void stop() {
+        running = false;
+        if (worker != null) worker.interrupt();
+        if (animator != null) animator.interrupt();
+    }
+
+    public void run(GraphicsContext gc, double speed, Runnable onFinish) {
         setupWalls();
 
         final int canvasWidth = cols * cellSize;
@@ -36,8 +48,8 @@ public class DFS {
         });
 
         final boolean[][] visited = new boolean[rows][cols];
-        final boolean[][] frontier = new boolean[rows][cols];    // used to show current head only
-        final boolean[][] pathCells = new boolean[rows][cols];  // keep final path visible
+        final boolean[][] frontier = new boolean[rows][cols];
+        final boolean[][] pathCells = new boolean[rows][cols];
 
         final int[][] parentRow = new int[rows][cols];
         final int[][] parentCol = new int[rows][cols];
@@ -50,83 +62,77 @@ public class DFS {
         final int startRow = 0, startCol = 0;
         final int goalRow = rows - 1, goalCol = cols - 1;
 
-        // initial draw
         Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
 
-        new Thread(() -> {
+        running = true;
+        worker = new Thread(() -> {
             try {
                 boolean found = dfsExplore(startRow, startCol, gc, speed,
                         visited, frontier, pathCells, parentRow, parentCol, goalRow, goalCol);
-                if (found) {
+
+                if (running && found) {
                     LinkedList<int[]> path = reconstructPath(parentRow, parentCol, goalRow, goalCol);
                     animatePath(gc, path, speed, startRow, startCol, goalRow, goalCol, visited, frontier, pathCells);
                 } else {
-                    // final draw if not found
                     Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
                 }
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+            } catch (InterruptedException ignored) {
+                // stopped gracefully
+            } finally {
+                if (running && onFinish != null) {
+                    Platform.runLater(onFinish);
+                }
             }
-        }).start();
+        });
+        worker.setDaemon(true);
+        worker.start();
     }
 
-    /**
-     * Recursive DFS that animates forward movement and backtracking step-by-step.
-     * Returns true if goal was found (so caller can reconstruct path).
-     */
     private boolean dfsExplore(int r, int c,
                                GraphicsContext gc, double speed,
                                boolean[][] visited, boolean[][] frontier, boolean[][] pathCells,
                                int[][] parentRow, int[][] parentCol,
                                int goalRow, int goalCol) throws InterruptedException {
 
-        // If already visited (may be pushed multiple times), skip
+        if (!running || Thread.currentThread().isInterrupted()) return false;
+
         if (visited[r][c]) return false;
 
-        // Mark current as visited and show it as the single frontier/head
         visited[r][c] = true;
         frontier[r][c] = true;
         Platform.runLater(() -> drawGrid(gc, visited, frontier, 0, 0, goalRow, goalCol, pathCells));
-        Thread.sleep((long) (160 / Math.max(speed, 1)));
 
-        // Check goal
+        Thread.sleep((long) (160 / Math.max(speed, 1)));
+        if (!running || Thread.currentThread().isInterrupted()) return false;
+
         if (r == goalRow && c == goalCol) {
-            // Leave frontier true for the caller to handle final drawing/animation
             return true;
         }
 
-        int[][] directions = {{1,0},{0,1},{0,-1},{-1,0}}; // down, right, left, up
+        int[][] directions = {{1,0},{0,1},{0,-1},{-1,0}};
 
-        // Explore neighbors in LIFO order (depth-first)
         for (int[] dir : directions) {
             int nr = r + dir[0];
             int nc = c + dir[1];
             if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
             if (visited[nr][nc] || walls[nr][nc]) continue;
 
-            // Record parent for path reconstruction
             parentRow[nr][nc] = r;
             parentCol[nr][nc] = c;
 
-            // Move forward visually: clear frontier on current so it becomes green,
-            // then recurse into neighbor which will set frontier on the neighbor.
             frontier[r][c] = false;
             Platform.runLater(() -> drawGrid(gc, visited, frontier, 0, 0, goalRow, goalCol, pathCells));
             Thread.sleep((long) (120 / Math.max(speed, 1)));
+            if (!running || Thread.currentThread().isInterrupted()) return false;
 
             boolean found = dfsExplore(nr, nc, gc, speed, visited, frontier, pathCells, parentRow, parentCol, goalRow, goalCol);
-            if (found) {
-                // If child found the goal we bubble up immediately (do not re-mark frontier on this node)
-                return true;
-            }
+            if (found) return true;
 
-            // Child finished and didn't find goal -> animate backtracking: set this node as frontier/head again
             frontier[r][c] = true;
             Platform.runLater(() -> drawGrid(gc, visited, frontier, 0, 0, goalRow, goalCol, pathCells));
             Thread.sleep((long) (120 / Math.max(speed, 1)));
         }
 
-        // All neighbors tried, none found -> remove frontier and let caller continue/backtrack
         frontier[r][c] = false;
         Platform.runLater(() -> drawGrid(gc, visited, frontier, 0, 0, goalRow, goalCol, pathCells));
         Thread.sleep((long) (120 / Math.max(speed, 1)));
@@ -149,9 +155,11 @@ public class DFS {
     private void animatePath(GraphicsContext gc, LinkedList<int[]> path, double speed,
                              int startRow, int startCol, int goalRow, int goalCol,
                              boolean[][] visited, boolean[][] frontier, boolean[][] pathCells) {
-        new Thread(() -> {
+        animator = new Thread(() -> {
             try {
                 for (int[] cell : path) {
+                    if (!running || Thread.currentThread().isInterrupted()) return;
+
                     int r = cell[0], c = cell[1];
                     if (!((r == startRow && c == startCol) || (r == goalRow && c == goalCol))) {
                         pathCells[r][c] = true;
@@ -159,16 +167,17 @@ public class DFS {
                         Thread.sleep((long) (160 / Math.max(speed, 1)));
                     }
                 }
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+            } catch (InterruptedException ignored) {
+                // stopped
             }
-        }).start();
+        });
+        animator.setDaemon(true);
+        animator.start();
     }
 
     private void drawGrid(GraphicsContext gc, boolean[][] visited, boolean[][] frontier,
                           int startRow, int startCol, int goalRow, int goalCol,
                           boolean[][] pathCells) {
-        // IMPORTANT: frontier must be drawn *before* visited so frontier (blue) overlays visited (green)
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
                 double x = c * cellSize;
@@ -178,7 +187,7 @@ public class DFS {
                     gc.setFill(pathColor);
                 } else if (walls[r][c]) {
                     gc.setFill(wallColor);
-                } else if (frontier[r][c]) {         // <-- frontier before visited
+                } else if (frontier[r][c]) {
                     gc.setFill(frontierColor);
                 } else if (visited[r][c]) {
                     gc.setFill(exploredColor);
@@ -192,7 +201,6 @@ public class DFS {
             }
         }
 
-        // draw start and goal on top
         gc.setFill(startColor);
         gc.fillRect(startCol * cellSize, startRow * cellSize, cellSize, cellSize);
 
@@ -201,7 +209,6 @@ public class DFS {
     }
 
     private void setupWalls() {
-        // reuse the BFS layout for now (can customize later)
         for (int c = 0; c < cols; c++) {
             if (c == 5 || c == 10 || c == 15) continue;
             walls[10][c] = true;
