@@ -25,7 +25,10 @@ public class MainController {
             ((BFS) currentAlgorithm).stop();
         } else if (currentAlgorithm instanceof DFS) {
             ((DFS) currentAlgorithm).stop();
+        }else if (currentAlgorithm instanceof Dijkstra) {
+            ((Dijkstra) currentAlgorithm).stop();
         }
+
         currentAlgorithm = null;
     }
 
@@ -70,8 +73,10 @@ public class MainController {
 
         Dijkstra dijkstra = new Dijkstra();
         currentAlgorithm = dijkstra;
-        dijkstra.run(gc, speed);
+        dijkstra.run(gc, speed, () ->
+                Platform.runLater(() -> statusLabel.setText("Dijkstra Finished")));
     }
+
 
     @FXML
     private void handleRunAStar() {
