@@ -25,8 +25,21 @@ public class BFS {
     // Walls
     private final boolean[][] walls = new boolean[rows][cols];
 
-    public void run(GraphicsContext gc, double speed) {
-        // setup static walls first
+    // Thread control
+    private volatile boolean running = false;
+    private Thread worker;
+    private Thread animator;
+
+    /**
+     * Run BFS with animation.
+     * @param gc graphics context
+     * @param speed animation speed
+     * @param onFinish callback when BFS fully completes (or stops)
+     */
+    public void run(GraphicsContext gc, double speed, Runnable onFinish) {
+        stop(); // stop previous run
+        running = true;
+
         setupWalls();
 
         final int canvasWidth = cols * cellSize;
@@ -59,30 +72,35 @@ public class BFS {
         visited[startRow][startCol] = true;
         frontier[startRow][startCol] = true;
 
-        int[][] directions = {{0,1},{1,0},{0,-1},{-1,0}}; // right, down, left, up
-
         Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
 
-        new Thread(() -> {
+        worker = new Thread(() -> {
             try {
-                while (!queue.isEmpty()) {
+                while (!queue.isEmpty() && running) {
                     int[] node = queue.poll();
                     int r = node[0], c = node[1];
 
                     frontier[r][c] = false;
                     visited[r][c] = true;
 
-                    Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
+                    if (!running) return; // ⬅️ important
+                    Platform.runLater(() -> {
+                        if (running) drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells);
+                    });
 
-                    if (r == goalRow && c == goalCol) {
+                    // Goal found
+                    if (r == goalRow && c == goalCol && running) {
                         LinkedList<int[]> path = reconstructPath(parentRow, parentCol, goalRow, goalCol);
-                        animatePath(gc, path, speed, startRow, startCol, goalRow, goalCol, visited, frontier, pathCells);
-                        break;
+                        animatePath(gc, path, speed, startRow, startCol, goalRow, goalCol, visited, frontier, pathCells, onFinish);
+                        return;
                     }
 
+                    if (!running) return; // ⬅️ before sleep
                     Thread.sleep((long) (200 / Math.max(speed, 1)));
 
+                    int[][] directions = {{0,1},{1,0},{0,-1},{-1,0}};
                     for (int[] dir : directions) {
+                        if (!running) return; // ⬅️ before processing neighbors
                         int nr = r + dir[0];
                         int nc = c + dir[1];
                         if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && !visited[nr][nc] && !walls[nr][nc]) {
@@ -91,16 +109,39 @@ public class BFS {
                                 parentRow[nr][nc] = r;
                                 parentCol[nr][nc] = c;
                                 queue.add(new int[]{nr, nc});
-                                Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
+
+                                if (!running) return;
+                                Platform.runLater(() -> {
+                                    if (running) drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells);
+                                });
                             }
                         }
                     }
                 }
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+            } catch (InterruptedException ignored) {
+            } finally {
+                if (onFinish != null && running) {
+                    Platform.runLater(onFinish);
+                }
             }
-        }).start();
+        });
+
+        worker.start();
     }
+
+    /** Stop BFS and any running animations */
+    public void stop() {
+        running = false;
+        if (worker != null) {
+            worker.interrupt();
+            worker = null;
+        }
+        if (animator != null) {
+            animator.interrupt();
+            animator = null;
+        }
+    }
+
 
     private LinkedList<int[]> reconstructPath(int[][] parentRow, int[][] parentCol, int goalRow, int goalCol) {
         LinkedList<int[]> path = new LinkedList<>();
@@ -117,10 +158,12 @@ public class BFS {
 
     private void animatePath(GraphicsContext gc, LinkedList<int[]> path, double speed,
                              int startRow, int startCol, int goalRow, int goalCol,
-                             boolean[][] visited, boolean[][] frontier, boolean[][] pathCells) {
-        new Thread(() -> {
+                             boolean[][] visited, boolean[][] frontier, boolean[][] pathCells,
+                             Runnable onFinish) {
+        animator = new Thread(() -> {
             try {
                 for (int[] cell : path) {
+                    if (!running) return;
                     int r = cell[0], c = cell[1];
                     if (!((r == startRow && c == startCol) || (r == goalRow && c == goalCol))) {
                         pathCells[r][c] = true;
@@ -128,10 +171,14 @@ public class BFS {
                         Thread.sleep((long) (200 / Math.max(speed, 1)));
                     }
                 }
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+            } catch (InterruptedException ignored) {
+            } finally {
+                if (onFinish != null && running) {
+                    Platform.runLater(onFinish);
+                }
             }
-        }).start();
+        });
+        animator.start();
     }
 
     private void drawGrid(GraphicsContext gc, boolean[][] visited, boolean[][] frontier,
@@ -168,19 +215,16 @@ public class BFS {
     }
 
     private void setupWalls() {
-        // Horizontal barrier with gaps
         for (int c = 0; c < cols; c++) {
-            if (c == 5 || c == 10 || c == 15) continue; // leave some openings
+            if (c == 5 || c == 10 || c == 15) continue;
             walls[10][c] = true;
         }
 
-        // Vertical barrier with one gap
         for (int r = 4; r < rows; r++) {
-            if (r == 12) continue; // opening
+            if (r == 12) continue;
             walls[r][4] = true;
         }
 
-        // Zig-zag wall
         for (int r = 6; r < rows - 3; r++) {
             if (r % 2 == 0) {
                 walls[r][14] = true;
