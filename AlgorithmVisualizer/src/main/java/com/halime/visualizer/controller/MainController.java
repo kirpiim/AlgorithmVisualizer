@@ -19,13 +19,17 @@ public class MainController {
     private Object currentAlgorithm; // keep reference to running algorithm
 
     /** Stop any currently running algorithm gracefully */
+    /** Stop any currently running algorithm gracefully */
     private void stopCurrentAlgorithm() {
         if (currentAlgorithm instanceof BFS) {
             ((BFS) currentAlgorithm).stop();
+        } else if (currentAlgorithm instanceof DFS) {
+            ((DFS) currentAlgorithm).stop();
         }
-        // later: add DFS.stop(), Dijkstra.stop(), AStar.stop()
         currentAlgorithm = null;
     }
+
+
 
     @FXML
     private void handleRunBFS() {
@@ -43,16 +47,18 @@ public class MainController {
 
     @FXML
     private void handleRunDFS() {
-        stopCurrentAlgorithm();
         statusLabel.setText("Running DFS...");
-
         var gc = canvas.getGraphicsContext2D();
         double speed = Math.max(1, speedSlider.getValue());
 
+        stopCurrentAlgorithm(); // stop BFS/other algo first
         DFS dfs = new DFS();
         currentAlgorithm = dfs;
-        dfs.run(gc, speed);
+        dfs.run(gc, speed, () ->
+                Platform.runLater(() -> statusLabel.setText("DFS Finished"))
+        );
     }
+
 
     @FXML
     private void handleRunDijkstra() {
