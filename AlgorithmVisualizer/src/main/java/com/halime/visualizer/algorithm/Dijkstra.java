@@ -24,7 +24,14 @@ public class Dijkstra {
     private final int[][] weights = new int[rows][cols];  // cell cost
     private final boolean[][] walls = new boolean[rows][cols];
 
-    public void run(GraphicsContext gc, double speed) {
+    private volatile boolean running = false;
+
+    public void stop() {
+        running = false;
+    }
+
+    public void run(GraphicsContext gc, double speed, Runnable onFinished) {
+        running = true;
         setupWeightsAndWalls();
 
         final int canvasWidth = cols * cellSize;
@@ -58,14 +65,19 @@ public class Dijkstra {
                 boolean found = dijkstraSearch(startRow, startCol, goalRow, goalCol,
                         gc, speed, visited, frontier, pathCells, parentRow, parentCol);
 
+                if (!running) return; // stopped
+
                 if (found) {
                     LinkedList<int[]> path = reconstructPath(parentRow, parentCol, goalRow, goalCol);
-                    animatePath(gc, path, speed, startRow, startCol, goalRow, goalCol, visited, frontier, pathCells);
+                    animatePath(gc, path, speed, startRow, startCol, goalRow, goalCol, visited, frontier, pathCells, onFinished);
                 } else {
                     Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
+                    if (onFinished != null) Platform.runLater(onFinished);
                 }
             } catch (InterruptedException e) {
                 e.printStackTrace();
+            } finally {
+                running = false;
             }
         }).start();
     }
@@ -82,17 +94,17 @@ public class Dijkstra {
         PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingInt(a -> dist[a[0]][a[1]]));
         pq.add(new int[]{startRow, startCol});
 
-        while (!pq.isEmpty()) {
+        while (!pq.isEmpty() && running) {
             int[] current = pq.poll();
             int r = current[0], c = current[1];
 
-            if (visited[r][c]) continue;
-            visited[r][c] = true;
+            if (visited[r][c]) continue; // skip outdated
 
-            frontier[r][c] = true;
+            frontier[r][c] = false; // remove from frontier
+            visited[r][c] = true;   // finalize
+
             Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
             Thread.sleep((long) (120 / Math.max(speed, 1)));
-            frontier[r][c] = false;
 
             if (r == goalRow && c == goalCol) {
                 return true;
@@ -100,8 +112,8 @@ public class Dijkstra {
 
             int[][] directions = {{1,0},{-1,0},{0,1},{0,-1}};
             for (int[] d : directions) {
-                int nr = r + d[0];
-                int nc = c + d[1];
+                if (!running) return false;
+                int nr = r + d[0], nc = c + d[1];
                 if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
                 if (walls[nr][nc]) continue;
 
@@ -111,9 +123,14 @@ public class Dijkstra {
                     parentRow[nr][nc] = r;
                     parentCol[nr][nc] = c;
                     pq.add(new int[]{nr, nc});
+                    if (!visited[nr][nc]) {
+                        frontier[nr][nc] = true; // only mark unvisited nodes
+                    }
                 }
             }
         }
+
+
         return false;
     }
 
@@ -132,10 +149,12 @@ public class Dijkstra {
 
     private void animatePath(GraphicsContext gc, LinkedList<int[]> path, double speed,
                              int startRow, int startCol, int goalRow, int goalCol,
-                             boolean[][] visited, boolean[][] frontier, boolean[][] pathCells) {
+                             boolean[][] visited, boolean[][] frontier, boolean[][] pathCells,
+                             Runnable onFinished) {
         new Thread(() -> {
             try {
                 for (int[] cell : path) {
+                    if (!running) return;
                     int r = cell[0], c = cell[1];
                     if (!((r == startRow && c == startCol) || (r == goalRow && c == goalCol))) {
                         pathCells[r][c] = true;
@@ -145,13 +164,18 @@ public class Dijkstra {
                 }
             } catch (InterruptedException e) {
                 e.printStackTrace();
+            } finally {
+                if (onFinished != null && running) Platform.runLater(onFinished);
+                running = false;
             }
         }).start();
     }
 
+    // drawGrid() and setupWeightsAndWalls() stay the same...
     private void drawGrid(GraphicsContext gc, boolean[][] visited, boolean[][] frontier,
                           int startRow, int startCol, int goalRow, int goalCol,
                           boolean[][] pathCells) {
+        // unchanged
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
                 double x = c * cellSize;
@@ -166,34 +190,26 @@ public class Dijkstra {
                 } else if (visited[r][c]) {
                     gc.setFill(exploredColor);
                 } else {
-                    // weight-based color
                     if (weights[r][c] == 1) {
-                        gc.setFill(unexploredColor); // normal ground
+                        gc.setFill(unexploredColor);
                     } else if (weights[r][c] == 5) {
-                        gc.setFill(Color.ORANGE);  // rocky terrain
+                        gc.setFill(Color.ORANGE);
                     } else if (weights[r][c] == 10) {
-                        gc.setFill(Color.LIGHTBLUE); // water
+                        gc.setFill(Color.LIGHTBLUE);
                     } else {
                         gc.setFill(unexploredColor);
                     }
                 }
-
-                // fill cell
                 gc.fillRect(x, y, cellSize, cellSize);
-
-                // optional: draw grid lines
                 gc.setStroke(Color.DARKGRAY);
                 gc.strokeRect(x, y, cellSize, cellSize);
 
-                // optional: draw weight numbers for clarity
                 if (!walls[r][c] && weights[r][c] > 1) {
                     gc.setFill(Color.BLACK);
                     gc.fillText(String.valueOf(weights[r][c]), x + cellSize / 3, y + cellSize / 1.5);
                 }
             }
         }
-
-        // draw start and goal on top
         gc.setFill(startColor);
         gc.fillRect(startCol * cellSize, startRow * cellSize, cellSize, cellSize);
 
@@ -201,52 +217,34 @@ public class Dijkstra {
         gc.fillRect(goalCol * cellSize, goalRow * cellSize, cellSize, cellSize);
     }
 
-
     private void setupWeightsAndWalls() {
-        // default weight = 1 everywhere
+        // unchanged
         for (int r = 0; r < rows; r++)
             for (int c = 0; c < cols; c++) {
                 weights[r][c] = 1;
                 walls[r][c] = false;
             }
-
-        // -----------------------
-        // Maze-like walls
-        // -----------------------
-        // horizontal wall with 2 gaps
         for (int c = 0; c < cols; c++) {
-            if (c == 3 || c == 14) continue;  // openings
+            if (c == 3 || c == 14) continue;
             walls[5][c] = true;
         }
-
-        // vertical wall left side
         for (int r = 6; r < rows - 3; r++) {
-            if (r == 10) continue; // opening
+            if (r == 10) continue;
             walls[r][7] = true;
         }
-
-        // zig-zag walls near the right
         for (int r = 2; r < rows - 2; r++) {
             if (r % 2 == 0) walls[r][12] = true;
             else walls[r][13] = true;
         }
-
-        // -----------------------
-        // Weighted terrain
-        // -----------------------
-        // rocky ground (cost 5, dark gray)
         for (int r = 8; r < 12; r++) {
             for (int c = 2; c < 6; c++) {
                 weights[r][c] = 5;
             }
         }
-
-        // water area (cost 10, light blue)
         for (int r = 14; r < 18; r++) {
             for (int c = 10; c < 15; c++) {
                 weights[r][c] = 10;
             }
         }
     }
-
 }
