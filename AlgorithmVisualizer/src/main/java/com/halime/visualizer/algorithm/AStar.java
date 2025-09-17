@@ -1,5 +1,6 @@
 package com.halime.visualizer.algorithm;
 
+import com.halime.visualizer.controller.MainController;
 import javafx.application.Platform;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
@@ -14,6 +15,8 @@ public class AStar {
 
     // Control
     private volatile boolean running = false;
+    private Thread worker;
+    private final MainController controller;
 
     // Colors
     private final Color unexploredColor = Color.LIGHTGRAY;
@@ -27,7 +30,20 @@ public class AStar {
     private final int[][] weights = new int[rows][cols];  // cell cost
     private final boolean[][] walls = new boolean[rows][cols];
 
-    public void run(GraphicsContext gc, double speed) {
+    public AStar(MainController controller) {
+        this.controller = controller;
+    }
+
+    public void stop() {
+        running = false;
+        if (worker != null) {
+            worker.interrupt();
+            worker = null;
+        }
+    }
+
+    public void run(GraphicsContext gc, Runnable onFinished) {
+        stop(); // stop any running algo first
         running = true;
         setupWeightsAndWalls();
 
@@ -57,29 +73,32 @@ public class AStar {
 
         Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
 
-        new Thread(() -> {
+        worker = new Thread(() -> {
             try {
                 boolean found = aStarSearch(startRow, startCol, goalRow, goalCol,
-                        gc, speed, visited, frontier, pathCells, parentRow, parentCol);
+                        gc, visited, frontier, pathCells, parentRow, parentCol);
 
-                if (running && found) {
+                if (!running) return;
+
+                if (found) {
                     LinkedList<int[]> path = reconstructPath(parentRow, parentCol, goalRow, goalCol);
-                    animatePath(gc, path, speed, startRow, startCol, goalRow, goalCol, visited, frontier, pathCells);
-                } else if (running) {
+                    animatePath(gc, path, startRow, startCol, goalRow, goalCol, visited, frontier, pathCells, onFinished);
+                } else {
                     Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
+                    if (onFinished != null) Platform.runLater(onFinished);
                 }
-            } catch (InterruptedException e) {
+            } catch (InterruptedException ignored) {
                 Thread.currentThread().interrupt();
+            } finally {
+                running = false;
             }
-        }).start();
-    }
-
-    public void stop() {
-        running = false;
+        });
+        worker.setDaemon(true);
+        worker.start();
     }
 
     private boolean aStarSearch(int startRow, int startCol, int goalRow, int goalCol,
-                                GraphicsContext gc, double speed,
+                                GraphicsContext gc,
                                 boolean[][] visited, boolean[][] frontier, boolean[][] pathCells,
                                 int[][] parentRow, int[][] parentCol) throws InterruptedException {
 
@@ -96,12 +115,15 @@ public class AStar {
             int r = current[0], c = current[1];
 
             if (visited[r][c]) continue;
-            visited[r][c] = true;
-
             frontier[r][c] = true;
             Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
-            Thread.sleep((long) (120 / Math.max(speed, 1)));
+
+            double speed = (controller != null) ? Math.max(controller.getSpeed(), 0.1) : 1.0;
+            Thread.sleep((long) (120 / speed));
+
             frontier[r][c] = false;
+            visited[r][c] = true;
+            Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
 
             if (r == goalRow && c == goalCol) {
                 return true;
@@ -143,9 +165,10 @@ public class AStar {
         return path;
     }
 
-    private void animatePath(GraphicsContext gc, LinkedList<int[]> path, double speed,
+    private void animatePath(GraphicsContext gc, LinkedList<int[]> path,
                              int startRow, int startCol, int goalRow, int goalCol,
-                             boolean[][] visited, boolean[][] frontier, boolean[][] pathCells) {
+                             boolean[][] visited, boolean[][] frontier, boolean[][] pathCells,
+                             Runnable onFinished) {
         new Thread(() -> {
             try {
                 for (int[] cell : path) {
@@ -154,11 +177,16 @@ public class AStar {
                     if (!((r == startRow && c == startCol) || (r == goalRow && c == goalCol))) {
                         pathCells[r][c] = true;
                         Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
-                        Thread.sleep((long) (160 / Math.max(speed, 1)));
+
+                        double speed = (controller != null) ? Math.max(controller.getSpeed(), 0.1) : 1.0;
+                        Thread.sleep((long) (160 / speed));
                     }
                 }
-            } catch (InterruptedException e) {
+            } catch (InterruptedException ignored) {
                 Thread.currentThread().interrupt();
+            } finally {
+                if (onFinished != null && running) Platform.runLater(onFinished);
+                running = false;
             }
         }).start();
     }
