@@ -1,5 +1,6 @@
 package com.halime.visualizer.algorithm;
 
+import com.halime.visualizer.controller.MainController;
 import javafx.application.Platform;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.canvas.Canvas;
@@ -30,13 +31,14 @@ public class BFS {
     private Thread worker;
     private Thread animator;
 
-    /**
-     * Run BFS with animation.
-     * @param gc graphics context
-     * @param speed animation speed
-     * @param onFinish callback when BFS fully completes (or stops)
-     */
-    public void run(GraphicsContext gc, double speed, Runnable onFinish) {
+    private final MainController controller;
+
+    public BFS(MainController controller) {
+        this.controller = controller;
+    }
+
+    /** Run BFS with animation. */
+    public void run(GraphicsContext gc, Runnable onFinish) {
         stop(); // stop previous run
         running = true;
 
@@ -83,7 +85,7 @@ public class BFS {
                     frontier[r][c] = false;
                     visited[r][c] = true;
 
-                    if (!running) return; // ⬅️ important
+                    if (!running) return;
                     Platform.runLater(() -> {
                         if (running) drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells);
                     });
@@ -91,16 +93,15 @@ public class BFS {
                     // Goal found
                     if (r == goalRow && c == goalCol && running) {
                         LinkedList<int[]> path = reconstructPath(parentRow, parentCol, goalRow, goalCol);
-                        animatePath(gc, path, speed, startRow, startCol, goalRow, goalCol, visited, frontier, pathCells, onFinish);
+                        animatePath(gc, path, startRow, startCol, goalRow, goalCol, visited, frontier, pathCells, onFinish);
                         return;
                     }
 
-                    if (!running) return; // ⬅️ before sleep
-                    Thread.sleep((long) (200 / Math.max(speed, 1)));
+                    sleepDynamic(200);
 
                     int[][] directions = {{0,1},{1,0},{0,-1},{-1,0}};
                     for (int[] dir : directions) {
-                        if (!running) return; // ⬅️ before processing neighbors
+                        if (!running) return;
                         int nr = r + dir[0];
                         int nc = c + dir[1];
                         if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && !visited[nr][nc] && !walls[nr][nc]) {
@@ -110,7 +111,6 @@ public class BFS {
                                 parentCol[nr][nc] = c;
                                 queue.add(new int[]{nr, nc});
 
-                                if (!running) return;
                                 Platform.runLater(() -> {
                                     if (running) drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells);
                                 });
@@ -126,6 +126,7 @@ public class BFS {
             }
         });
 
+        worker.setDaemon(true);
         worker.start();
     }
 
@@ -142,7 +143,6 @@ public class BFS {
         }
     }
 
-
     private LinkedList<int[]> reconstructPath(int[][] parentRow, int[][] parentCol, int goalRow, int goalCol) {
         LinkedList<int[]> path = new LinkedList<>();
         int cr = goalRow, cc = goalCol;
@@ -156,7 +156,7 @@ public class BFS {
         return path;
     }
 
-    private void animatePath(GraphicsContext gc, LinkedList<int[]> path, double speed,
+    private void animatePath(GraphicsContext gc, LinkedList<int[]> path,
                              int startRow, int startCol, int goalRow, int goalCol,
                              boolean[][] visited, boolean[][] frontier, boolean[][] pathCells,
                              Runnable onFinish) {
@@ -168,7 +168,7 @@ public class BFS {
                     if (!((r == startRow && c == startCol) || (r == goalRow && c == goalCol))) {
                         pathCells[r][c] = true;
                         Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
-                        Thread.sleep((long) (200 / Math.max(speed, 1)));
+                        sleepDynamic(200);
                     }
                 }
             } catch (InterruptedException ignored) {
@@ -178,6 +178,7 @@ public class BFS {
                 }
             }
         });
+        animator.setDaemon(true);
         animator.start();
     }
 
@@ -232,5 +233,11 @@ public class BFS {
                 walls[r][15] = true;
             }
         }
+    }
+
+    /** Sleep using current slider speed */
+    private void sleepDynamic(long baseDelay) throws InterruptedException {
+        double speed = Math.max(controller.getSpeed(), 0.1);
+        Thread.sleep((long) (baseDelay / speed));
     }
 }
