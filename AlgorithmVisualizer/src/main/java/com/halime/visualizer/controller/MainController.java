@@ -71,13 +71,11 @@ public class MainController {
         statusLabel.setText("Running Dijkstra...");
 
         var gc = canvas.getGraphicsContext2D();
-        double speed = Math.max(1, speedSlider.getValue());
-
-        Dijkstra dijkstra = new Dijkstra();
+        Dijkstra dijkstra = new Dijkstra(this); // pass controller so Dijkstra can read slider
         currentAlgorithm = dijkstra;
-        dijkstra.run(gc, speed, () ->
-                Platform.runLater(() -> statusLabel.setText("Dijkstra Finished")));
+        dijkstra.run(gc, () -> Platform.runLater(() -> statusLabel.setText("Dijkstra Finished")));
     }
+
 
 
     @FXML
@@ -86,10 +84,9 @@ public class MainController {
         statusLabel.setText("Running A*...");
 
         var gc = canvas.getGraphicsContext2D();
-        double speed = Math.max(1, speedSlider.getValue());
-
-        AStar aStar = new AStar();
+        AStar aStar = new AStar(this); // pass controller for slider speed
         currentAlgorithm = aStar;
-        aStar.run(gc, speed);
+        aStar.run(gc, () -> Platform.runLater(() -> statusLabel.setText("A* Finished")));
     }
+
 }
