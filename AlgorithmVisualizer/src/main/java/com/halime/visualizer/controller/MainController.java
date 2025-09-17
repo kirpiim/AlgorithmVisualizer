@@ -42,17 +42,15 @@ public class MainController {
 
     @FXML
     private void handleRunBFS() {
-        stopCurrentAlgorithm(); // stop previous before starting new
+        stopCurrentAlgorithm();
         statusLabel.setText("Running BFS...");
 
         var gc = canvas.getGraphicsContext2D();
-        double speed = Math.max(1, speedSlider.getValue());
-
-        BFS bfs = new BFS();
+        BFS bfs = new BFS(this);   // pass controller reference
         currentAlgorithm = bfs;
-        bfs.run(gc, speed, () ->
-                Platform.runLater(() -> statusLabel.setText("BFS Finished")));
+        bfs.run(gc, () -> Platform.runLater(() -> statusLabel.setText("BFS Finished")));
     }
+
 
     @FXML
     private void handleRunDFS() {
