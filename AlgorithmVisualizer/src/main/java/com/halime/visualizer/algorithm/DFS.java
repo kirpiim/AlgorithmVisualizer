@@ -1,5 +1,6 @@
 package com.halime.visualizer.algorithm;
 
+import com.halime.visualizer.controller.MainController;
 import javafx.application.Platform;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
@@ -28,6 +29,12 @@ public class DFS {
     private Thread worker;
     private Thread animator;
 
+    private final MainController controller;
+
+    public DFS(MainController controller) {
+        this.controller = controller;
+    }
+
     /** Gracefully stop DFS and its animation */
     public void stop() {
         running = false;
@@ -35,7 +42,7 @@ public class DFS {
         if (animator != null) animator.interrupt();
     }
 
-    public void run(GraphicsContext gc, double speed, Runnable onFinish) {
+    public void run(GraphicsContext gc, Runnable onFinish) {
         setupWalls();
 
         final int canvasWidth = cols * cellSize;
@@ -67,12 +74,12 @@ public class DFS {
         running = true;
         worker = new Thread(() -> {
             try {
-                boolean found = dfsExplore(startRow, startCol, gc, speed,
+                boolean found = dfsExplore(startRow, startCol, gc,
                         visited, frontier, pathCells, parentRow, parentCol, goalRow, goalCol);
 
                 if (running && found) {
                     LinkedList<int[]> path = reconstructPath(parentRow, parentCol, goalRow, goalCol);
-                    animatePath(gc, path, speed, startRow, startCol, goalRow, goalCol, visited, frontier, pathCells);
+                    animatePath(gc, path, startRow, startCol, goalRow, goalCol, visited, frontier, pathCells);
                 } else {
                     Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
                 }
@@ -89,7 +96,7 @@ public class DFS {
     }
 
     private boolean dfsExplore(int r, int c,
-                               GraphicsContext gc, double speed,
+                               GraphicsContext gc,
                                boolean[][] visited, boolean[][] frontier, boolean[][] pathCells,
                                int[][] parentRow, int[][] parentCol,
                                int goalRow, int goalCol) throws InterruptedException {
@@ -102,7 +109,7 @@ public class DFS {
         frontier[r][c] = true;
         Platform.runLater(() -> drawGrid(gc, visited, frontier, 0, 0, goalRow, goalCol, pathCells));
 
-        Thread.sleep((long) (160 / Math.max(speed, 1)));
+        sleepDynamic(160);
         if (!running || Thread.currentThread().isInterrupted()) return false;
 
         if (r == goalRow && c == goalCol) {
@@ -122,20 +129,20 @@ public class DFS {
 
             frontier[r][c] = false;
             Platform.runLater(() -> drawGrid(gc, visited, frontier, 0, 0, goalRow, goalCol, pathCells));
-            Thread.sleep((long) (120 / Math.max(speed, 1)));
+            sleepDynamic(120);
             if (!running || Thread.currentThread().isInterrupted()) return false;
 
-            boolean found = dfsExplore(nr, nc, gc, speed, visited, frontier, pathCells, parentRow, parentCol, goalRow, goalCol);
+            boolean found = dfsExplore(nr, nc, gc, visited, frontier, pathCells, parentRow, parentCol, goalRow, goalCol);
             if (found) return true;
 
             frontier[r][c] = true;
             Platform.runLater(() -> drawGrid(gc, visited, frontier, 0, 0, goalRow, goalCol, pathCells));
-            Thread.sleep((long) (120 / Math.max(speed, 1)));
+            sleepDynamic(120);
         }
 
         frontier[r][c] = false;
         Platform.runLater(() -> drawGrid(gc, visited, frontier, 0, 0, goalRow, goalCol, pathCells));
-        Thread.sleep((long) (120 / Math.max(speed, 1)));
+        sleepDynamic(120);
         return false;
     }
 
@@ -152,7 +159,7 @@ public class DFS {
         return path;
     }
 
-    private void animatePath(GraphicsContext gc, LinkedList<int[]> path, double speed,
+    private void animatePath(GraphicsContext gc, LinkedList<int[]> path,
                              int startRow, int startCol, int goalRow, int goalCol,
                              boolean[][] visited, boolean[][] frontier, boolean[][] pathCells) {
         animator = new Thread(() -> {
@@ -164,7 +171,7 @@ public class DFS {
                     if (!((r == startRow && c == startCol) || (r == goalRow && c == goalCol))) {
                         pathCells[r][c] = true;
                         Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
-                        Thread.sleep((long) (160 / Math.max(speed, 1)));
+                        sleepDynamic(160);
                     }
                 }
             } catch (InterruptedException ignored) {
@@ -221,5 +228,11 @@ public class DFS {
             if (r % 2 == 0) walls[r][14] = true;
             else walls[r][15] = true;
         }
+    }
+
+    /** Sleep using current slider speed */
+    private void sleepDynamic(long baseDelay) throws InterruptedException {
+        double speed = Math.max(controller.getSpeed(), 0.1);
+        Thread.sleep((long) (baseDelay / speed));
     }
 }
