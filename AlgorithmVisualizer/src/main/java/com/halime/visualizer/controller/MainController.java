@@ -18,6 +18,12 @@ public class MainController {
 
     private Object currentAlgorithm; // keep reference to running algorithm
 
+
+    public double getSpeed() {
+        return speedSlider.getValue(); // live slider value
+    }
+
+
     /** Stop any currently running algorithm gracefully */
     /** Stop any currently running algorithm gracefully */
     private void stopCurrentAlgorithm() {
@@ -50,17 +56,15 @@ public class MainController {
 
     @FXML
     private void handleRunDFS() {
+        stopCurrentAlgorithm();
         statusLabel.setText("Running DFS...");
-        var gc = canvas.getGraphicsContext2D();
-        double speed = Math.max(1, speedSlider.getValue());
 
-        stopCurrentAlgorithm(); // stop BFS/other algo first
-        DFS dfs = new DFS();
+        var gc = canvas.getGraphicsContext2D();
+        DFS dfs = new DFS(this);   // pass controller reference
         currentAlgorithm = dfs;
-        dfs.run(gc, speed, () ->
-                Platform.runLater(() -> statusLabel.setText("DFS Finished"))
-        );
+        dfs.run(gc, () -> Platform.runLater(() -> statusLabel.setText("DFS Finished")));
     }
+
 
 
     @FXML
