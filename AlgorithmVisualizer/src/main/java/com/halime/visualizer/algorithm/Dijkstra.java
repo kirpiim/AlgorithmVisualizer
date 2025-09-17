@@ -1,5 +1,6 @@
 package com.halime.visualizer.algorithm;
 
+import com.halime.visualizer.controller.MainController;
 import javafx.application.Platform;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
@@ -25,12 +26,23 @@ public class Dijkstra {
     private final boolean[][] walls = new boolean[rows][cols];
 
     private volatile boolean running = false;
+    private Thread worker;
+    private final MainController controller; // used for dynamic speed
+
+    public Dijkstra(MainController controller) {
+        this.controller = controller;
+    }
 
     public void stop() {
         running = false;
+        if (worker != null) {
+            worker.interrupt();
+            worker = null;
+        }
     }
 
-    public void run(GraphicsContext gc, double speed, Runnable onFinished) {
+    public void run(GraphicsContext gc, Runnable onFinished) {
+        stop(); // ensure previous run stopped
         running = true;
         setupWeightsAndWalls();
 
@@ -60,30 +72,32 @@ public class Dijkstra {
 
         Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
 
-        new Thread(() -> {
+        worker = new Thread(() -> {
             try {
                 boolean found = dijkstraSearch(startRow, startCol, goalRow, goalCol,
-                        gc, speed, visited, frontier, pathCells, parentRow, parentCol);
+                        gc, visited, frontier, pathCells, parentRow, parentCol);
 
-                if (!running) return; // stopped
+                if (!running) return; // cancelled
 
                 if (found) {
                     LinkedList<int[]> path = reconstructPath(parentRow, parentCol, goalRow, goalCol);
-                    animatePath(gc, path, speed, startRow, startCol, goalRow, goalCol, visited, frontier, pathCells, onFinished);
+                    animatePath(gc, path, startRow, startCol, goalRow, goalCol, visited, frontier, pathCells, onFinished);
                 } else {
                     Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
                     if (onFinished != null) Platform.runLater(onFinished);
                 }
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                Thread.currentThread().interrupt();
             } finally {
                 running = false;
             }
-        }).start();
+        });
+        worker.setDaemon(true);
+        worker.start();
     }
 
     private boolean dijkstraSearch(int startRow, int startCol, int goalRow, int goalCol,
-                                   GraphicsContext gc, double speed,
+                                   GraphicsContext gc,
                                    boolean[][] visited, boolean[][] frontier, boolean[][] pathCells,
                                    int[][] parentRow, int[][] parentCol) throws InterruptedException {
 
@@ -98,13 +112,20 @@ public class Dijkstra {
             int[] current = pq.poll();
             int r = current[0], c = current[1];
 
-            if (visited[r][c]) continue; // skip outdated
+            if (visited[r][c]) continue;
 
-            frontier[r][c] = false; // remove from frontier
-            visited[r][c] = true;   // finalize
-
+            // mark current as frontier (visual)
+            frontier[r][c] = true;
             Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
-            Thread.sleep((long) (120 / Math.max(speed, 1)));
+
+            // sleep using dynamic slider speed (fallback to 1 if controller missing)
+            double speed = (controller != null) ? Math.max(controller.getSpeed(), 0.1) : 1.0;
+            Thread.sleep((long) (120 / speed));
+
+            // finalize current node
+            frontier[r][c] = false;
+            visited[r][c] = true;
+            Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
 
             if (r == goalRow && c == goalCol) {
                 return true;
@@ -124,13 +145,12 @@ public class Dijkstra {
                     parentCol[nr][nc] = c;
                     pq.add(new int[]{nr, nc});
                     if (!visited[nr][nc]) {
-                        frontier[nr][nc] = true; // only mark unvisited nodes
+                        frontier[nr][nc] = true; // mark discovered
+                        Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
                     }
                 }
             }
         }
-
-
         return false;
     }
 
@@ -147,7 +167,7 @@ public class Dijkstra {
         return path;
     }
 
-    private void animatePath(GraphicsContext gc, LinkedList<int[]> path, double speed,
+    private void animatePath(GraphicsContext gc, LinkedList<int[]> path,
                              int startRow, int startCol, int goalRow, int goalCol,
                              boolean[][] visited, boolean[][] frontier, boolean[][] pathCells,
                              Runnable onFinished) {
@@ -159,11 +179,13 @@ public class Dijkstra {
                     if (!((r == startRow && c == startCol) || (r == goalRow && c == goalCol))) {
                         pathCells[r][c] = true;
                         Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
-                        Thread.sleep((long) (160 / Math.max(speed, 1)));
+
+                        double speed = (controller != null) ? Math.max(controller.getSpeed(), 0.1) : 1.0;
+                        Thread.sleep((long) (160 / speed));
                     }
                 }
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
             } finally {
                 if (onFinished != null && running) Platform.runLater(onFinished);
                 running = false;
@@ -171,11 +193,9 @@ public class Dijkstra {
         }).start();
     }
 
-    // drawGrid() and setupWeightsAndWalls() stay the same...
     private void drawGrid(GraphicsContext gc, boolean[][] visited, boolean[][] frontier,
                           int startRow, int startCol, int goalRow, int goalCol,
                           boolean[][] pathCells) {
-        // unchanged
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
                 double x = c * cellSize;
@@ -200,6 +220,7 @@ public class Dijkstra {
                         gc.setFill(unexploredColor);
                     }
                 }
+
                 gc.fillRect(x, y, cellSize, cellSize);
                 gc.setStroke(Color.DARKGRAY);
                 gc.strokeRect(x, y, cellSize, cellSize);
@@ -210,6 +231,8 @@ public class Dijkstra {
                 }
             }
         }
+
+        // start & goal on top
         gc.setFill(startColor);
         gc.fillRect(startCol * cellSize, startRow * cellSize, cellSize, cellSize);
 
@@ -218,29 +241,39 @@ public class Dijkstra {
     }
 
     private void setupWeightsAndWalls() {
-        // unchanged
+        // default
         for (int r = 0; r < rows; r++)
             for (int c = 0; c < cols; c++) {
                 weights[r][c] = 1;
                 walls[r][c] = false;
             }
+
+        // horizontal wall with gaps
         for (int c = 0; c < cols; c++) {
             if (c == 3 || c == 14) continue;
             walls[5][c] = true;
         }
+
+        // vertical wall left side
         for (int r = 6; r < rows - 3; r++) {
-            if (r == 10) continue;
+            if (r == 10) continue; // opening
             walls[r][7] = true;
         }
+
+        // zig-zag walls near right
         for (int r = 2; r < rows - 2; r++) {
             if (r % 2 == 0) walls[r][12] = true;
             else walls[r][13] = true;
         }
+
+        // rocky ground (cost 5)
         for (int r = 8; r < 12; r++) {
             for (int c = 2; c < 6; c++) {
                 weights[r][c] = 5;
             }
         }
+
+        // water (cost 10)
         for (int r = 14; r < 18; r++) {
             for (int c = 10; c < 15; c++) {
                 weights[r][c] = 10;
