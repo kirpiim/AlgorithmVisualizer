@@ -27,6 +27,7 @@ public class Dijkstra {
 
     private volatile boolean running = false;
     private Thread worker;
+    private Thread animator;
     private final MainController controller; // used for dynamic speed
 
     public Dijkstra(MainController controller) {
@@ -38,6 +39,10 @@ public class Dijkstra {
         if (worker != null) {
             worker.interrupt();
             worker = null;
+        }
+        if (animator != null) {
+            animator.interrupt();
+            animator = null;
         }
     }
 
@@ -81,17 +86,18 @@ public class Dijkstra {
 
                 if (found) {
                     LinkedList<int[]> path = reconstructPath(parentRow, parentCol, goalRow, goalCol);
+                    // animator handles finishing lifecycle (sets running = false and calls onFinished)
                     animatePath(gc, path, startRow, startCol, goalRow, goalCol, visited, frontier, pathCells, onFinished);
                 } else {
                     Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
                     if (onFinished != null) Platform.runLater(onFinished);
+                    running = false;
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-            } finally {
-                running = false;
             }
         });
+
         worker.setDaemon(true);
         worker.start();
     }
@@ -107,6 +113,8 @@ public class Dijkstra {
 
         PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingInt(a -> dist[a[0]][a[1]]));
         pq.add(new int[]{startRow, startCol});
+        frontier[startRow][startCol] = true;
+        Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
 
         while (!pq.isEmpty() && running) {
             int[] current = pq.poll();
@@ -119,8 +127,7 @@ public class Dijkstra {
             Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
 
             // sleep using dynamic slider speed (fallback to 1 if controller missing)
-            double speed = (controller != null) ? Math.max(controller.getSpeed(), 0.1) : 1.0;
-            Thread.sleep((long) (120 / speed));
+            sleepDynamic(120);
 
             // finalize current node
             frontier[r][c] = false;
@@ -171,26 +178,29 @@ public class Dijkstra {
                              int startRow, int startCol, int goalRow, int goalCol,
                              boolean[][] visited, boolean[][] frontier, boolean[][] pathCells,
                              Runnable onFinished) {
-        new Thread(() -> {
+        animator = new Thread(() -> {
             try {
                 for (int[] cell : path) {
                     if (!running) return;
                     int r = cell[0], c = cell[1];
+
+                    // skip start & goal so they keep their colors
                     if (!((r == startRow && c == startCol) || (r == goalRow && c == goalCol))) {
                         pathCells[r][c] = true;
                         Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
-
-                        double speed = (controller != null) ? Math.max(controller.getSpeed(), 0.1) : 1.0;
-                        Thread.sleep((long) (160 / speed));
+                        sleepDynamic(160);
                     }
                 }
             } catch (InterruptedException ignored) {
                 Thread.currentThread().interrupt();
             } finally {
-                if (onFinished != null && running) Platform.runLater(onFinished);
+                if (onFinished != null) Platform.runLater(onFinished);
                 running = false;
+                animator = null;
             }
-        }).start();
+        });
+        animator.setDaemon(true);
+        animator.start();
     }
 
     private void drawGrid(GraphicsContext gc, boolean[][] visited, boolean[][] frontier,
@@ -232,7 +242,7 @@ public class Dijkstra {
             }
         }
 
-        // start & goal on top
+        // Start & goal on top
         gc.setFill(startColor);
         gc.fillRect(startCol * cellSize, startRow * cellSize, cellSize, cellSize);
 
@@ -241,7 +251,6 @@ public class Dijkstra {
     }
 
     private void setupWeightsAndWalls() {
-        // default
         for (int r = 0; r < rows; r++)
             for (int c = 0; c < cols; c++) {
                 weights[r][c] = 1;
@@ -279,5 +288,11 @@ public class Dijkstra {
                 weights[r][c] = 10;
             }
         }
+    }
+
+    /** Sleep factoring controller slider speed */
+    private void sleepDynamic(long baseDelay) throws InterruptedException {
+        double speed = (controller != null) ? Math.max(controller.getSpeed(), 0.1) : 1.0;
+        Thread.sleep((long) (baseDelay / speed));
     }
 }
