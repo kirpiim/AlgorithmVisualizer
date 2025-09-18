@@ -13,9 +13,9 @@ public class AStar {
     private final int cols = 20;
     private final int cellSize = 30;
 
-    // Control
     private volatile boolean running = false;
     private Thread worker;
+    private Thread animator;
     private final MainController controller;
 
     // Colors
@@ -27,7 +27,7 @@ public class AStar {
     private final Color startColor = Color.YELLOW;
     private final Color pathColor = Color.PURPLE;
 
-    private final int[][] weights = new int[rows][cols];  // cell cost
+    private final int[][] weights = new int[rows][cols];
     private final boolean[][] walls = new boolean[rows][cols];
 
     public AStar(MainController controller) {
@@ -40,16 +40,20 @@ public class AStar {
             worker.interrupt();
             worker = null;
         }
+        if (animator != null) {
+            animator.interrupt();
+            animator = null;
+        }
     }
 
     public void run(GraphicsContext gc, Runnable onFinished) {
-        stop(); // stop any running algo first
+        stop();
         running = true;
         setupWeightsAndWalls();
 
+        // ✅ Fix: resize canvas so grid fits exactly
         final int canvasWidth = cols * cellSize;
         final int canvasHeight = rows * cellSize;
-
         Canvas canvas = gc.getCanvas();
         Platform.runLater(() -> {
             canvas.setWidth(canvasWidth);
@@ -82,15 +86,15 @@ public class AStar {
 
                 if (found) {
                     LinkedList<int[]> path = reconstructPath(parentRow, parentCol, goalRow, goalCol);
-                    animatePath(gc, path, startRow, startCol, goalRow, goalCol, visited, frontier, pathCells, onFinished);
+                    animatePath(gc, path, startRow, startCol, goalRow, goalCol,
+                            visited, frontier, pathCells, onFinished);
                 } else {
                     Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
                     if (onFinished != null) Platform.runLater(onFinished);
+                    running = false;
                 }
             } catch (InterruptedException ignored) {
                 Thread.currentThread().interrupt();
-            } finally {
-                running = false;
             }
         });
         worker.setDaemon(true);
@@ -109,17 +113,18 @@ public class AStar {
         PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingInt(a ->
                 g[a[0]][a[1]] + heuristic(a[0], a[1], goalRow, goalCol)));
         pq.add(new int[]{startRow, startCol});
+        frontier[startRow][startCol] = true;
+        Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
 
         while (running && !pq.isEmpty()) {
             int[] current = pq.poll();
             int r = current[0], c = current[1];
 
             if (visited[r][c]) continue;
+
             frontier[r][c] = true;
             Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
-
-            double speed = (controller != null) ? Math.max(controller.getSpeed(), 0.1) : 1.0;
-            Thread.sleep((long) (120 / speed));
+            sleepDynamic(120);
 
             frontier[r][c] = false;
             visited[r][c] = true;
@@ -131,8 +136,8 @@ public class AStar {
 
             int[][] directions = {{1,0},{-1,0},{0,1},{0,-1}};
             for (int[] d : directions) {
-                int nr = r + d[0];
-                int nc = c + d[1];
+                if (!running) return false;
+                int nr = r + d[0], nc = c + d[1];
                 if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
                 if (walls[nr][nc]) continue;
 
@@ -142,6 +147,10 @@ public class AStar {
                     parentRow[nr][nc] = r;
                     parentCol[nr][nc] = c;
                     pq.add(new int[]{nr, nc});
+                    if (!visited[nr][nc]) {
+                        frontier[nr][nc] = true;
+                        Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
+                    }
                 }
             }
         }
@@ -149,7 +158,7 @@ public class AStar {
     }
 
     private int heuristic(int r, int c, int goalRow, int goalCol) {
-        return Math.abs(r - goalRow) + Math.abs(c - goalCol); // Manhattan
+        return Math.abs(r - goalRow) + Math.abs(c - goalCol);
     }
 
     private LinkedList<int[]> reconstructPath(int[][] parentRow, int[][] parentCol, int goalRow, int goalCol) {
@@ -169,26 +178,28 @@ public class AStar {
                              int startRow, int startCol, int goalRow, int goalCol,
                              boolean[][] visited, boolean[][] frontier, boolean[][] pathCells,
                              Runnable onFinished) {
-        new Thread(() -> {
+        animator = new Thread(() -> {
             try {
                 for (int[] cell : path) {
                     if (!running) return;
                     int r = cell[0], c = cell[1];
+
                     if (!((r == startRow && c == startCol) || (r == goalRow && c == goalCol))) {
                         pathCells[r][c] = true;
                         Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
-
-                        double speed = (controller != null) ? Math.max(controller.getSpeed(), 0.1) : 1.0;
-                        Thread.sleep((long) (160 / speed));
+                        sleepDynamic(160);
                     }
                 }
             } catch (InterruptedException ignored) {
                 Thread.currentThread().interrupt();
             } finally {
-                if (onFinished != null && running) Platform.runLater(onFinished);
+                if (onFinished != null) Platform.runLater(onFinished);
                 running = false;
+                animator = null;
             }
-        }).start();
+        });
+        animator.setDaemon(true);
+        animator.start();
     }
 
     private void drawGrid(GraphicsContext gc, boolean[][] visited, boolean[][] frontier,
@@ -244,35 +255,21 @@ public class AStar {
                 walls[r][c] = false;
             }
 
-        // horizontal wall with gaps
         for (int c = 0; c < cols; c++) {
             if (c == 3 || c == 14) continue;
             walls[5][c] = true;
         }
-
-        // vertical wall
-        for (int r = 6; r < rows - 3; r++) {
-            if (r == 10) continue;
-            walls[r][7] = true;
-        }
-
-        // zig-zag walls
+        for (int r = 6; r < rows - 3; r++) if (r != 10) walls[r][7] = true;
         for (int r = 2; r < rows - 2; r++) {
             if (r % 2 == 0) walls[r][12] = true;
             else walls[r][13] = true;
         }
+        for (int r = 8; r < 12; r++) for (int c = 2; c < 6; c++) weights[r][c] = 5;
+        for (int r = 14; r < 18; r++) for (int c = 10; c < 15; c++) weights[r][c] = 10;
+    }
 
-        // weighted terrain
-        for (int r = 8; r < 12; r++) {
-            for (int c = 2; c < 6; c++) {
-                weights[r][c] = 5;
-            }
-        }
-
-        for (int r = 14; r < 18; r++) {
-            for (int c = 10; c < 15; c++) {
-                weights[r][c] = 10;
-            }
-        }
+    private void sleepDynamic(long baseDelay) throws InterruptedException {
+        double speed = (controller != null) ? Math.max(controller.getSpeed(), 0.1) : 1.0;
+        Thread.sleep((long) (baseDelay / speed));
     }
 }
