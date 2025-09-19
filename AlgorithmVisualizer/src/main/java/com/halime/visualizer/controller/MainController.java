@@ -9,6 +9,10 @@ import javafx.fxml.FXML;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.control.Label;
 import javafx.scene.control.Slider;
+import javafx.application.Platform;
+import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.canvas.Canvas;
+import javafx.scene.paint.Color;
 
 public class MainController {
 
@@ -22,21 +26,67 @@ public class MainController {
     public double getSpeed() {
         return speedSlider.getValue(); // live slider value
     }
+    @FXML
+    private void handleReset() {
+        stopCurrentAlgorithm();
+        statusLabel.setText("Grid Reset");
+
+        GraphicsContext gc = canvas.getGraphicsContext2D();
+        drawEmptyGrid(gc);
+    }
+
+    /** Draws an empty BFS-style grid with only start + goal */
+    private void drawEmptyGrid(GraphicsContext gc) {
+        int rows = 20;
+        int cols = 20;
+        int cellSize = 30;
+
+        // Resize canvas to match algorithms
+        canvas.setWidth(cols * cellSize);
+        canvas.setHeight(rows * cellSize);
+
+        // Fill background
+        gc.setFill(Color.LIGHTGRAY);
+        gc.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
+
+        // Draw empty grid cells
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols; c++) {
+                double x = c * cellSize;
+                double y = r * cellSize;
+                gc.setFill(Color.LIGHTGRAY);
+                gc.fillRect(x, y, cellSize, cellSize);
+
+                gc.setStroke(Color.DARKGRAY);
+                gc.strokeRect(x, y, cellSize, cellSize);
+            }
+        }
+
+        // Start (yellow)
+        gc.setFill(Color.YELLOW);
+        gc.fillRect(0, 0, cellSize, cellSize);
+
+        // Goal (red) — bottom-right
+        gc.setFill(Color.RED);
+        gc.fillRect((cols - 1) * cellSize, (rows - 1) * cellSize, cellSize, cellSize);
+    }
 
 
-    /** Stop any currently running algorithm gracefully */
     /** Stop any currently running algorithm gracefully */
     private void stopCurrentAlgorithm() {
         if (currentAlgorithm instanceof BFS) {
             ((BFS) currentAlgorithm).stop();
         } else if (currentAlgorithm instanceof DFS) {
             ((DFS) currentAlgorithm).stop();
-        }else if (currentAlgorithm instanceof Dijkstra) {
+        } else if (currentAlgorithm instanceof Dijkstra) {
             ((Dijkstra) currentAlgorithm).stop();
+        } else if (currentAlgorithm instanceof AStar) {
+            ((AStar) currentAlgorithm).stop();
         }
 
         currentAlgorithm = null;
     }
+
 
 
 
