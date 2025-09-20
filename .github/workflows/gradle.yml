@@ -36,10 +36,11 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x AlgorithmVisualizer/gradlew
 
+
       # Build the project from subfolder
       - name: Build with Gradle
-        run: ./AlgorithmVisualizer/gradlew build --stacktrace
+        run: cd AlgorithmVisualizer && ./gradlew build --stacktrace
 
       # Run tests from subfolder
       - name: Run tests
-        run: ./AlgorithmVisualizer/gradlew test --stacktrace
+        run: cd AlgorithmVisualizer && ./gradlew test --stacktrace
