@@ -8,6 +8,13 @@ import javafx.scene.paint.Color;
 
 import java.util.LinkedList;
 
+/**
+ * Depth-First Search (DFS) pathfinding algorithm with animated visualization.
+ *
+ * <p>This class runs DFS in a background thread, drawing visited nodes,
+ * frontier nodes, and the final path on a JavaFX Canvas. It supports
+ * walls, start/goal nodes, and dynamic animation speed.</p>
+ */
 public class DFS {
     private final int rows = 20;
     private final int cols = 20;
@@ -30,7 +37,11 @@ public class DFS {
     private Thread animator;
 
     private final MainController controller;
-
+    /**
+     * Creates a new DFS instance bound to the given controller.
+     *
+     * @param controller main controller providing speed and UI updates
+     */
     public DFS(MainController controller) {
         this.controller = controller;
     }
@@ -42,6 +53,12 @@ public class DFS {
         if (animator != null) animator.interrupt();
     }
 
+    /**
+     * Executes the DFS algorithm in a background thread and animates the result.
+     *
+     * @param gc        graphics context for drawing the grid
+     * @param onFinish  callback invoked when the search finishes
+     */
     public void run(GraphicsContext gc, Runnable onFinish) {
         setupWalls();
 
@@ -94,7 +111,21 @@ public class DFS {
         worker.setDaemon(true);
         worker.start();
     }
-
+    /**
+     * Recursive DFS exploration.
+     *
+     * @param r          current row
+     * @param c          current column
+     * @param gc         graphics context
+     * @param visited    visited state grid
+     * @param frontier   frontier state grid
+     * @param pathCells  cells belonging to the final path
+     * @param parentRow  parent row references
+     * @param parentCol  parent col references
+     * @param goalRow    goal row
+     * @param goalCol    goal col
+     * @return true if goal is found, false otherwise
+     */
     private boolean dfsExplore(int r, int c,
                                GraphicsContext gc,
                                boolean[][] visited, boolean[][] frontier, boolean[][] pathCells,
@@ -145,7 +176,15 @@ public class DFS {
         sleepDynamic(120);
         return false;
     }
-
+    /**
+     * Reconstructs the path from goal to start using parent references.
+     *
+     * @param parentRow parent row references
+     * @param parentCol parent col references
+     * @param goalRow   goal row
+     * @param goalCol   goal col
+     * @return ordered list of path cells
+     */
     private LinkedList<int[]> reconstructPath(int[][] parentRow, int[][] parentCol, int goalRow, int goalCol) {
         LinkedList<int[]> path = new LinkedList<>();
         int cr = goalRow, cc = goalCol;
@@ -159,6 +198,7 @@ public class DFS {
         return path;
     }
 
+    /**Animates the reconstructed path step-by-step.*/
     private void animatePath(GraphicsContext gc, LinkedList<int[]> path,
                              int startRow, int startCol, int goalRow, int goalCol,
                              boolean[][] visited, boolean[][] frontier, boolean[][] pathCells) {
@@ -181,7 +221,9 @@ public class DFS {
         animator.setDaemon(true);
         animator.start();
     }
-
+    /**
+     * Draws the grid with current DFS state (visited, frontier, walls, path).
+     */
     private void drawGrid(GraphicsContext gc, boolean[][] visited, boolean[][] frontier,
                           int startRow, int startCol, int goalRow, int goalCol,
                           boolean[][] pathCells) {
@@ -214,7 +256,9 @@ public class DFS {
         gc.setFill(goalColor);
         gc.fillRect(goalCol * cellSize, goalRow * cellSize, cellSize, cellSize);
     }
-
+    /**
+     * Sets up walls in the grid before running DFS.
+     */
     private void setupWalls() {
         for (int c = 0; c < cols; c++) {
             if (c == 5 || c == 10 || c == 15) continue;
@@ -230,7 +274,12 @@ public class DFS {
         }
     }
 
-    /** Sleep using current slider speed */
+    /**
+     * Sleeps for a delay that depends on the current speed slider.
+     *
+     * @param baseDelay base delay in milliseconds
+     * @throws InterruptedException if the thread is interrupted
+     */
     private void sleepDynamic(long baseDelay) throws InterruptedException {
         double speed = Math.max(controller.getSpeed(), 0.1);
         Thread.sleep((long) (baseDelay / speed));

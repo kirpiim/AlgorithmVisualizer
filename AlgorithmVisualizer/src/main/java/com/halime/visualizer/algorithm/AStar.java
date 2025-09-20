@@ -7,6 +7,18 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.paint.Color;
 
 import java.util.*;
+/**
+ * A* Search Algorithm (with visualization).
+ *
+ * Implements A* pathfinding on a 20x20 weighted grid.
+ * Visualizes frontier, visited, path, start/goal, and walls using JavaFX Canvas.
+ *
+ * Supports:
+ * - Dynamic animation speed via {@link MainController#getSpeed()}
+ * - Weighted terrain (cost 1, 5, 10)
+ * - Walls and obstacles
+ * - Threaded search and animation for responsiveness
+ */
 
 public class AStar {
     private final int rows = 20;
@@ -30,10 +42,20 @@ public class AStar {
     private final int[][] weights = new int[rows][cols];
     private final boolean[][] walls = new boolean[rows][cols];
 
+    // --- Fields omitted for brevity ---
+
+    /**
+     * Constructor: initialize with reference to {@link MainController}.
+     * @param controller the controller providing speed and control
+     */
     public AStar(MainController controller) {
         this.controller = controller;
     }
 
+    /**
+     * Stop A* execution and cancel both worker (search) and animator threads.
+     * Used when resetting or switching algorithms.
+     */
     public void stop() {
         running = false;
         if (worker != null) {
@@ -46,12 +68,18 @@ public class AStar {
         }
     }
 
+    /**
+     * Run A* from start to goal.
+     *
+     * @param gc canvas graphics context
+     * @param onFinished callback after finish
+     */
     public void run(GraphicsContext gc, Runnable onFinished) {
         stop();
         running = true;
         setupWeightsAndWalls();
 
-        // ✅ Fix: resize canvas so grid fits exactly
+        // Resize canvas to fit grid
         final int canvasWidth = cols * cellSize;
         final int canvasHeight = rows * cellSize;
         Canvas canvas = gc.getCanvas();
@@ -60,6 +88,7 @@ public class AStar {
             canvas.setHeight(canvasHeight);
         });
 
+        // Initialize search structures
         final boolean[][] visited = new boolean[rows][cols];
         final boolean[][] frontier = new boolean[rows][cols];
         final boolean[][] pathCells = new boolean[rows][cols];
@@ -77,6 +106,7 @@ public class AStar {
 
         Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
 
+        // Worker thread runs the actual A* search
         worker = new Thread(() -> {
             try {
                 boolean found = aStarSearch(startRow, startCol, goalRow, goalCol,
@@ -101,6 +131,12 @@ public class AStar {
         worker.start();
     }
 
+    /**
+     * Core A* search loop.
+     * Uses a priority queue with f = g + h (Manhattan heuristic).
+     *
+     * @return true if path to goal was found, false otherwise
+     */
     private boolean aStarSearch(int startRow, int startCol, int goalRow, int goalCol,
                                 GraphicsContext gc,
                                 boolean[][] visited, boolean[][] frontier, boolean[][] pathCells,
@@ -122,18 +158,22 @@ public class AStar {
 
             if (visited[r][c]) continue;
 
+            // Show as frontier before exploring
             frontier[r][c] = true;
             Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
             sleepDynamic(120);
 
+            // Mark as visited
             frontier[r][c] = false;
             visited[r][c] = true;
             Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
 
+            // Goal check
             if (r == goalRow && c == goalCol) {
                 return true;
             }
 
+            // Explore neighbors
             int[][] directions = {{1,0},{-1,0},{0,1},{0,-1}};
             for (int[] d : directions) {
                 if (!running) return false;
@@ -157,10 +197,17 @@ public class AStar {
         return false;
     }
 
+    /**
+     * Manhattan distance heuristic for A*.
+     */
     private int heuristic(int r, int c, int goalRow, int goalCol) {
         return Math.abs(r - goalRow) + Math.abs(c - goalCol);
     }
 
+    /**
+     * Reconstructs path from goal to start using parent arrays.
+     * Returns a list of coordinates (row, col) in correct order.
+     */
     private LinkedList<int[]> reconstructPath(int[][] parentRow, int[][] parentCol, int goalRow, int goalCol) {
         LinkedList<int[]> path = new LinkedList<>();
         int cr = goalRow, cc = goalCol;
@@ -174,6 +221,10 @@ public class AStar {
         return path;
     }
 
+    /**
+     * Animates the reconstructed path in purple, step by step.
+     * Runs on a separate animator thread for smooth UI updates.
+     */
     private void animatePath(GraphicsContext gc, LinkedList<int[]> path,
                              int startRow, int startCol, int goalRow, int goalCol,
                              boolean[][] visited, boolean[][] frontier, boolean[][] pathCells,
@@ -202,6 +253,12 @@ public class AStar {
         animator.start();
     }
 
+    /**
+     * Draws the entire grid with:
+     * - Frontier (blue), visited (green), path (purple)
+     * - Start (yellow) and goal (red)
+     * - Walls (black), weighted terrain, unexplored (gray)
+     */
     private void drawGrid(GraphicsContext gc, boolean[][] visited, boolean[][] frontier,
                           int startRow, int startCol, int goalRow, int goalCol,
                           boolean[][] pathCells) {
@@ -248,6 +305,11 @@ public class AStar {
         gc.fillRect(goalCol * cellSize, goalRow * cellSize, cellSize, cellSize);
     }
 
+    /**
+     * Initializes walls and weighted terrain.
+     * Cost 5 = orange, cost 10 = light blue.
+     * Some rows/columns blocked to force algorithm decisions.
+     */
     private void setupWeightsAndWalls() {
         for (int r = 0; r < rows; r++)
             for (int c = 0; c < cols; c++) {
@@ -268,6 +330,10 @@ public class AStar {
         for (int r = 14; r < 18; r++) for (int c = 10; c < 15; c++) weights[r][c] = 10;
     }
 
+    /**
+     * Sleep helper that scales with animation speed.
+     * Ensures faster/slower visualization depending on user control.
+     */
     private void sleepDynamic(long baseDelay) throws InterruptedException {
         double speed = (controller != null) ? Math.max(controller.getSpeed(), 0.1) : 1.0;
         Thread.sleep((long) (baseDelay / speed));

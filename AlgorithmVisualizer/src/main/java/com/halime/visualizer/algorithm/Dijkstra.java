@@ -7,7 +7,13 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.paint.Color;
 
 import java.util.*;
-
+/**
+ * Dijkstra's shortest path algorithm with animated visualization.
+ *
+ * <p>This class implements weighted pathfinding on a grid using Dijkstra’s algorithm.
+ * It supports walls, different terrain costs, and animates the exploration and
+ * shortest path reconstruction on a JavaFX Canvas.</p>
+ */
 public class Dijkstra {
     private final int rows = 20;
     private final int cols = 20;
@@ -30,10 +36,18 @@ public class Dijkstra {
     private Thread animator;
     private final MainController controller; // used for dynamic speed
 
+    /**
+     * Creates a new Dijkstra pathfinding instance bound to the given controller.
+     *
+     * @param controller main controller that provides speed and UI updates
+     */
     public Dijkstra(MainController controller) {
         this.controller = controller;
     }
 
+    /**
+     * Gracefully stops the algorithm and any active animations.
+     */
     public void stop() {
         running = false;
         if (worker != null) {
@@ -46,6 +60,12 @@ public class Dijkstra {
         }
     }
 
+    /**
+     * Executes Dijkstra’s algorithm in a background thread and animates the result.
+     *
+     * @param gc         graphics context for drawing the grid
+     * @param onFinished callback invoked when the search finishes
+     */
     public void run(GraphicsContext gc, Runnable onFinished) {
         stop(); // ensure previous run stopped
         running = true;
@@ -101,7 +121,22 @@ public class Dijkstra {
         worker.setDaemon(true);
         worker.start();
     }
-
+    /**
+     * Core Dijkstra search loop.
+     *
+     * @param startRow   start row
+     * @param startCol   start column
+     * @param goalRow    goal row
+     * @param goalCol    goal column
+     * @param gc         graphics context
+     * @param visited    visited cells
+     * @param frontier   frontier cells (discovered but not finalized)
+     * @param pathCells  cells that belong to the final path
+     * @param parentRow  parent row references for backtracking
+     * @param parentCol  parent col references for backtracking
+     * @return true if the goal was found, false otherwise
+     * @throws InterruptedException if the thread is interrupted
+     */
     private boolean dijkstraSearch(int startRow, int startCol, int goalRow, int goalCol,
                                    GraphicsContext gc,
                                    boolean[][] visited, boolean[][] frontier, boolean[][] pathCells,
@@ -161,6 +196,15 @@ public class Dijkstra {
         return false;
     }
 
+    /**
+     * Reconstructs the path from goal to start using parent references.
+     *
+     * @param parentRow parent row references
+     * @param parentCol parent col references
+     * @param goalRow   goal row
+     * @param goalCol   goal column
+     * @return ordered list of cells representing the shortest path
+     */
     private LinkedList<int[]> reconstructPath(int[][] parentRow, int[][] parentCol, int goalRow, int goalCol) {
         LinkedList<int[]> path = new LinkedList<>();
         int cr = goalRow, cc = goalCol;
@@ -174,6 +218,20 @@ public class Dijkstra {
         return path;
     }
 
+    /**
+     * Animates the reconstructed path step-by-step.
+     *
+     * @param gc         graphics context
+     * @param path       path cells
+     * @param startRow   start row
+     * @param startCol   start column
+     * @param goalRow    goal row
+     * @param goalCol    goal column
+     * @param visited    visited cells
+     * @param frontier   frontier cells
+     * @param pathCells  path state
+     * @param onFinished callback to run after animation
+     */
     private void animatePath(GraphicsContext gc, LinkedList<int[]> path,
                              int startRow, int startCol, int goalRow, int goalCol,
                              boolean[][] visited, boolean[][] frontier, boolean[][] pathCells,
@@ -203,6 +261,12 @@ public class Dijkstra {
         animator.start();
     }
 
+    /**
+     * Draws the grid with the current state of Dijkstra’s algorithm.
+     *
+     * <p>Cells may show walls, weighted terrain, explored cells, frontier,
+     * or the reconstructed path.</p>
+     */
     private void drawGrid(GraphicsContext gc, boolean[][] visited, boolean[][] frontier,
                           int startRow, int startCol, int goalRow, int goalCol,
                           boolean[][] pathCells) {
@@ -250,6 +314,12 @@ public class Dijkstra {
         gc.fillRect(goalCol * cellSize, goalRow * cellSize, cellSize, cellSize);
     }
 
+    /**
+     * Initializes walls and weighted terrain in the grid.
+     *
+     * <p>Walls block traversal completely, while some cells are given
+     * higher costs to simulate difficult terrain (e.g., rocky or water).</p>
+     */
     private void setupWeightsAndWalls() {
         for (int r = 0; r < rows; r++)
             for (int c = 0; c < cols; c++) {
@@ -290,7 +360,12 @@ public class Dijkstra {
         }
     }
 
-    /** Sleep factoring controller slider speed */
+    /**
+     * Sleeps for a delay scaled by the controller’s speed slider.
+     *
+     * @param baseDelay base delay in milliseconds
+     * @throws InterruptedException if interrupted while sleeping
+     */
     private void sleepDynamic(long baseDelay) throws InterruptedException {
         double speed = (controller != null) ? Math.max(controller.getSpeed(), 0.1) : 1.0;
         Thread.sleep((long) (baseDelay / speed));

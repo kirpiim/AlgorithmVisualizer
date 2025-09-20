@@ -37,7 +37,13 @@ public class BFS {
         this.controller = controller;
     }
 
-    /** Run BFS with animation. */
+    /**
+     * Run BFS algorithm with animation.
+     * - Stops any previous run
+     * - Resizes the canvas
+     * - Initializes visited/frontier arrays
+     * - Performs BFS until goal is found
+     */
     public void run(GraphicsContext gc, Runnable onFinish) {
         stop(); // stop previous run
         running = true;
@@ -76,6 +82,7 @@ public class BFS {
 
         Platform.runLater(() -> drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells));
 
+        //Worker thread that runs BFS
         worker = new Thread(() -> {
             try {
                 while (!queue.isEmpty() && running) {
@@ -90,7 +97,7 @@ public class BFS {
                         if (running) drawGrid(gc, visited, frontier, startRow, startCol, goalRow, goalCol, pathCells);
                     });
 
-                    // Goal found
+                    // Check goal condition
                     if (r == goalRow && c == goalCol && running) {
                         LinkedList<int[]> path = reconstructPath(parentRow, parentCol, goalRow, goalCol);
                         animatePath(gc, path, startRow, startCol, goalRow, goalCol, visited, frontier, pathCells, onFinish);
@@ -99,6 +106,7 @@ public class BFS {
 
                     sleepDynamic(200);
 
+                    // Explore neighbors
                     int[][] directions = {{0,1},{1,0},{0,-1},{-1,0}};
                     for (int[] dir : directions) {
                         if (!running) return;
@@ -143,6 +151,7 @@ public class BFS {
         }
     }
 
+    /** Reconstruct path from goal back to start */
     private LinkedList<int[]> reconstructPath(int[][] parentRow, int[][] parentCol, int goalRow, int goalCol) {
         LinkedList<int[]> path = new LinkedList<>();
         int cr = goalRow, cc = goalCol;
@@ -156,6 +165,7 @@ public class BFS {
         return path;
     }
 
+    /** Animate the reconstructed path */
     private void animatePath(GraphicsContext gc, LinkedList<int[]> path,
                              int startRow, int startCol, int goalRow, int goalCol,
                              boolean[][] visited, boolean[][] frontier, boolean[][] pathCells,
@@ -182,6 +192,7 @@ public class BFS {
         animator.start();
     }
 
+    /** Draws the BFS grid with current state */
     private void drawGrid(GraphicsContext gc, boolean[][] visited, boolean[][] frontier,
                           int startRow, int startCol, int goalRow, int goalCol,
                           boolean[][] pathCells) {
@@ -215,6 +226,7 @@ public class BFS {
         gc.fillRect(goalCol * cellSize, goalRow * cellSize, cellSize, cellSize);
     }
 
+    /** Predefine some walls for visualization */
     private void setupWalls() {
         for (int c = 0; c < cols; c++) {
             if (c == 5 || c == 10 || c == 15) continue;

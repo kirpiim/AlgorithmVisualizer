@@ -13,7 +13,22 @@ import javafx.application.Platform;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.paint.Color;
-
+/**
+ * Main JavaFX controller for the Pathfinding Visualizer.
+ *
+ * Handles user interaction, canvas drawing, algorithm execution,
+ * and animation speed control. Dispatches runs for BFS, DFS,
+ * Dijkstra, and A* algorithms while updating the UI asynchronously.
+ *
+ * Features:
+ * - Start/stop BFS, DFS, Dijkstra, and A*
+ * - Reset grid to an empty state (with start and goal only)
+ * - Speed slider for dynamic animation speed
+ * - Status label for feedback (running, finished, reset)
+ *
+ * Algorithms are run on worker threads and update the canvas
+ * safely via {@link Platform#runLater}.
+ */
 public class MainController {
 
     @FXML private Canvas canvas;
@@ -22,10 +37,19 @@ public class MainController {
 
     private Object currentAlgorithm; // keep reference to running algorithm
 
-
+    /**
+     * Get the current animation speed from the UI slider.
+     *
+     * @return live speed value (never null)
+     */
     public double getSpeed() {
         return speedSlider.getValue(); // live slider value
     }
+
+    /**
+     * Reset button handler.
+     * Stops any running algorithm and restores the grid to an empty state.
+     */
     @FXML
     private void handleReset() {
         stopCurrentAlgorithm();
@@ -35,7 +59,11 @@ public class MainController {
         drawEmptyGrid(gc);
     }
 
-    /** Draws an empty BFS-style grid with only start + goal */
+    /**
+     * Draw an empty 20x20 grid with only start (yellow) and goal (red).
+     *
+     * @param gc the canvas graphics context
+     */
     private void drawEmptyGrid(GraphicsContext gc) {
         int rows = 20;
         int cols = 20;
@@ -72,7 +100,10 @@ public class MainController {
     }
 
 
-    /** Stop any currently running algorithm gracefully */
+    /**
+     * Stop any currently running algorithm gracefully.
+     * Ensures worker and animator threads are cancelled.
+     */
     private void stopCurrentAlgorithm() {
         if (currentAlgorithm instanceof BFS) {
             ((BFS) currentAlgorithm).stop();
@@ -88,8 +119,9 @@ public class MainController {
     }
 
 
-
-
+    /**
+     * Run BFS algorithm and update status label on completion.
+     */
     @FXML
     private void handleRunBFS() {
         stopCurrentAlgorithm();
@@ -101,7 +133,9 @@ public class MainController {
         bfs.run(gc, () -> Platform.runLater(() -> statusLabel.setText("BFS Finished")));
     }
 
-
+    /**
+     * Run DFS algorithm and update status label on completion.
+     */
     @FXML
     private void handleRunDFS() {
         stopCurrentAlgorithm();
@@ -114,7 +148,9 @@ public class MainController {
     }
 
 
-
+    /**
+     * Run Dijkstra algorithm and update status label on completion.
+     */
     @FXML
     private void handleRunDijkstra() {
         stopCurrentAlgorithm();
@@ -127,7 +163,9 @@ public class MainController {
     }
 
 
-
+    /**
+     * Run A* algorithm and update status label on completion.
+     */
     @FXML
     private void handleRunAStar() {
         stopCurrentAlgorithm();
