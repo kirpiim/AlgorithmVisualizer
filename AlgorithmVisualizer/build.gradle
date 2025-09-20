@@ -2,10 +2,11 @@ plugins {
     id 'java'
     id 'application'
     id 'org.openjfx.javafxplugin' version '0.1.0'
+    id 'org.beryx.jlink' version '2.26.0'
 }
 
 group = 'com.halime.visualizer'
-version = '1.0-SNAPSHOT'
+version = '1.0.0'   //no SNAPSHOT
 
 repositories {
     mavenCentral()
@@ -27,9 +28,25 @@ javafx {
 }
 
 application {
+    // point to module and main class
+    mainModule = 'com.halime.visualizer'
     mainClass = 'com.halime.visualizer.MainApp'
 }
 
 test {
     useJUnitPlatform()
 }
+
+jlink {
+    mergedModule {
+        // no requires lines here
+    }
+
+    // This makes a .zip portable app
+    imageZip = file("$buildDir/distributions/${project.name}.zip")
+
+    launcher {
+        name = 'Visualizer'
+    }
+}
+
